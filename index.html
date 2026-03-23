@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TIMELOG — Local Time Tracker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:       #0d0e0f;
+      --surface:  #141618;
+      --border:   #252729;
+      --amber:    #f5a623;
+      --amber-dim:#7d5412;
+      --green:    #3ecf72;
+      --red:      #e84545;
+      --muted:    #555a60;
+      --text:     #d4cfc8;
+      --mono:     'Share Tech Mono', monospace;
+      --sans:     'Barlow', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      min-height: 100vh;
+      padding: 0;
+      overflow-x: hidden;
+    }
+
+    /* Scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.04) 2px,
+        rgba(0,0,0,0.04) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 18px;
+      letter-spacing: 4px;
+      color: var(--amber);
+      text-transform: uppercase;
+    }
+    .logo span { color: var(--muted); font-size: 11px; letter-spacing: 2px; display: block; margin-top: 2px; }
+
+    .header-clock {
+      font-family: var(--mono);
+      font-size: 28px;
+      color: var(--amber);
+      letter-spacing: 2px;
+      text-align: right;
+    }
+    .header-date {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+
+    /* ── TRACKER INPUT ── */
+    .tracker-bar {
+      display: grid;
+      grid-template-columns: 1fr 160px 130px auto;
+      gap: 10px;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 14px 18px;
+      margin-bottom: 28px;
+    }
+
+    .tracker-bar input, .tracker-bar select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .tracker-bar input:focus, .tracker-bar select:focus {
+      border-color: var(--amber-dim);
+    }
+    .tracker-bar input::placeholder { color: var(--muted); }
+
+    .timer-display {
+      font-family: var(--mono);
+      font-size: 22px;
+      color: var(--amber);
+      letter-spacing: 3px;
+      text-align: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 9px 12px;
+    }
+
+    .btn-start {
+      background: var(--amber);
+      color: #000;
+      border: none;
+      font-family: var(--mono);
+      font-size: 13px;
+      letter-spacing: 2px;
+      padding: 10px 22px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background .15s, transform .1s;
+    }
+    .btn-start:hover { background: #ffc043; }
+    .btn-start:active { transform: scale(0.97); }
+    .btn-start.running { background: var(--red); color: #fff; }
+    .btn-start.running:hover { background: #ff6060; }
+
+    /* ── STATS ROW ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 16px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--amber);
+      opacity: 0.35;
+    }
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 22px;
+      color: var(--amber);
+    }
+
+    /* ── MAIN GRID ── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+
+    /* ── ENTRIES TABLE ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-title {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .filter-row select, .filter-row input[type="date"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 11px;
+      padding: 4px 8px;
+      outline: none;
+    }
+    .btn-clear {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: var(--mono);
+      letter-spacing: 1px;
+      transition: border-color .2s, color .2s;
+    }
+    .btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead th {
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 10px 18px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-weight: 400;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .12s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(245,166,35,0.04); }
+    tbody td {
+      padding: 11px 18px;
+      font-size: 13px;
+    }
+    .td-task { font-weight: 600; color: var(--text); }
+    .td-project {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+      letter-spacing: 1px;
+    }
+    .td-duration {
+      font-family: var(--mono);
+      color: var(--amber);
+      font-size: 13px;
+    }
+    .td-time { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .btn-del {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 6px;
+      transition: color .15s;
+    }
+    .btn-del:hover { color: var(--red); }
+
+    .empty-state {
+      padding: 40px;
+      text-align: center;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 2px;
+    }
+
+    /* ── PROJECT BREAKDOWN ── */
+    .project-list { padding: 12px 0; }
+    .project-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .project-row:last-child { border-bottom: none; }
+    .project-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .project-name { flex: 1; font-size: 13px; }
+    .project-time {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--amber);
+    }
+    .project-bar-wrap {
+      width: 100%;
+      height: 3px;
+      background: var(--border);
+      margin-top: 5px;
+    }
+    .project-bar { height: 3px; transition: width .5s ease; }
+
+    /* ── EXPORT BTN ── */
+    .btn-export {
+      background: none;
+      border: 1px solid var(--amber-dim);
+      color: var(--amber);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 2px;
+      padding: 6px 14px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background .15s, border-color .15s;
+    }
+    .btn-export:hover { background: rgba(245,166,35,0.08); border-color: var(--amber); }
+
+    /* ── RUNNING INDICATOR ── */
+    .pulse {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      margin-right: 6px;
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .main-grid { grid-template-columns: 1fr; }
+      .tracker-bar { grid-template-columns: 1fr 1fr; }
+      .timer-display { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    TIMELOG
+    <span>local time tracker v1.0</span>
+  </div>
+  <div>
+    <div class="header-clock" id="headerClock">00:00:00</div>
+    <div class="header-date" id="headerDate"></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- TRACKER BAR -->
+  <div class="tracker-bar">
+    <input type="text" id="taskInput" placeholder="What are you working on?" />
+    <select id="projectSelect">
+      <option value="">— Project —</option>
+    </select>
+    <div class="timer-display" id="timerDisplay">00:00:00</div>
+    <button class="btn-start" id="startBtn" onclick="toggleTimer()">▶ START</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">Today</div>
+      <div class="stat-value" id="statToday">0:00:00</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">This Week</div>
+      <div class="stat-value" id="statWeek">0:00:00</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">This Month</div>
+      <div class="stat-value" id="statMonth">0:00:00</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">All Time</div>
+      <div class="stat-value" id="statAll">0:00:00</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- ENTRIES -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title" id="runningLabel">Time Entries</div>
+        <div class="filter-row">
+          <select id="filterProject" onchange="renderEntries()">
+            <option value="">All Projects</option>
+          </select>
+          <input type="date" id="filterDate" onchange="renderEntries()" />
+          <button class="btn-clear" onclick="clearFilters()">CLEAR</button>
+          <button class="btn-export" onclick="exportCSV()">↓ CSV</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Project</th>
+            <th>Duration</th>
+            <th>Time</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="entriesBody"></tbody>
+      </table>
+      <div class="empty-state" id="emptyState">NO ENTRIES YET — START TRACKING</div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+      <!-- MANAGE PROJECTS -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Projects</div>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="newProjectInput" placeholder="New project..." style="background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:12px;padding:4px 8px;outline:none;width:130px;" />
+            <button class="btn-export" onclick="addProject()" style="padding:5px 10px;">+ ADD</button>
+          </div>
+        </div>
+        <div class="project-list" id="projectBreakdown">
+          <div class="empty-state" style="padding:20px;">NO PROJECTS YET</div>
+        </div>
+      </div>
+
+      <!-- QUICK LOG (manual entry) -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Manual Entry</div>
+        </div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px;">
+          <input type="text" id="manualTask" placeholder="Task description" style="background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:8px 10px;outline:none;" />
+          <select id="manualProject" style="background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:8px 10px;outline:none;">
+            <option value="">— Project —</option>
+          </select>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <input type="datetime-local" id="manualStart" style="background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:12px;padding:7px 8px;outline:none;" />
+            <input type="datetime-local" id="manualEnd" style="background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:12px;padding:7px 8px;outline:none;" />
+          </div>
+          <button class="btn-start" onclick="addManualEntry()" style="background:var(--surface);color:var(--amber);border:1px solid var(--amber-dim);width:100%;text-align:center;">+ LOG ENTRY</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+let state = JSON.parse(localStorage.getItem('timelog_state') || JSON.stringify({
+  entries: [],
+  projects: ['General', 'Development', 'Design', 'Meetings'],
+  running: null
+}));
+
+// Migrate old data
+if (!state.projects) state.projects = ['General'];
+if (!state.entries) state.entries = [];
+if (state.running === undefined) state.running = null;
+
+let timerInterval = null;
+let clockInterval = null;
+
+const PROJECT_COLORS = [
+  '#f5a623','#3ecf72','#4ea8de','#e84545',
+  '#b388ff','#ff8a65','#80cbc4','#f06292',
+  '#aed581','#ffd54f','#4fc3f7','#ce93d8'
+];
+
+function save() {
+  localStorage.setItem('timelog_state', JSON.stringify(state));
+}
+
+// ── CLOCK ──────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('headerClock').textContent =
+    now.toTimeString().slice(0,8);
+  document.getElementById('headerDate').textContent =
+    now.toLocaleDateString('en-CA', { weekday:'long', year:'numeric', month:'long', day:'numeric' }).toUpperCase();
+}
+updateClock();
+clockInterval = setInterval(updateClock, 1000);
+
+// ── TIMER ──────────────────────────────────────────────────────────────────
+function formatDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function toggleTimer() {
+  if (state.running) {
+    stopTimer();
+  } else {
+    startTimer();
+  }
+}
+
+function startTimer() {
+  const task = document.getElementById('taskInput').value.trim();
+  const project = document.getElementById('projectSelect').value;
+  if (!task) {
+    document.getElementById('taskInput').focus();
+    document.getElementById('taskInput').style.borderColor = 'var(--red)';
+    setTimeout(() => document.getElementById('taskInput').style.borderColor = '', 1000);
+    return;
+  }
+  state.running = { task, project, startTime: Date.now() };
+  save();
+
+  const btn = document.getElementById('startBtn');
+  btn.textContent = '■ STOP';
+  btn.classList.add('running');
+
+  document.getElementById('runningLabel').innerHTML =
+    `<span class="pulse"></span>TRACKING — ${task}`;
+
+  timerInterval = setInterval(() => {
+    const elapsed = Date.now() - state.running.startTime;
+    document.getElementById('timerDisplay').textContent = formatDuration(elapsed);
+  }, 1000);
+}
+
+function stopTimer() {
+  if (!state.running) return;
+  clearInterval(timerInterval);
+
+  const endTime = Date.now();
+  const duration = endTime - state.running.startTime;
+
+  state.entries.unshift({
+    id: Date.now(),
+    task: state.running.task,
+    project: state.running.project || 'General',
+    startTime: state.running.startTime,
+    endTime,
+    duration
+  });
+  state.running = null;
+  save();
+
+  document.getElementById('startBtn').textContent = '▶ START';
+  document.getElementById('startBtn').classList.remove('running');
+  document.getElementById('timerDisplay').textContent = '00:00:00';
+  document.getElementById('taskInput').value = '';
+  document.getElementById('runningLabel').textContent = 'Time Entries';
+
+  render();
+}
+
+// ── PROJECTS ───────────────────────────────────────────────────────────────
+function addProject() {
+  const input = document.getElementById('newProjectInput');
+  const name = input.value.trim();
+  if (!name || state.projects.includes(name)) return;
+  state.projects.push(name);
+  save();
+  input.value = '';
+  renderProjectSelects();
+  renderProjectBreakdown();
+}
+
+function getProjectColor(name) {
+  const i = state.projects.indexOf(name);
+  return PROJECT_COLORS[i % PROJECT_COLORS.length] || '#aaa';
+}
+
+function renderProjectSelects() {
+  const opts = state.projects.map(p =>
+    `<option value="${p}">${p}</option>`
+  ).join('');
+  document.getElementById('projectSelect').innerHTML =
+    '<option value="">— Project —</option>' + opts;
+  document.getElementById('manualProject').innerHTML =
+    '<option value="">— Project —</option>' + opts;
+  document.getElementById('filterProject').innerHTML =
+    '<option value="">All Projects</option>' + opts;
+}
+
+function renderProjectBreakdown() {
+  const container = document.getElementById('projectBreakdown');
+  if (!state.projects.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:20px;">NO PROJECTS YET</div>';
+    return;
+  }
+
+  // Compute totals per project
+  const totals = {};
+  state.projects.forEach(p => totals[p] = 0);
+  state.entries.forEach(e => {
+    if (totals[e.project] !== undefined) totals[e.project] += e.duration;
+  });
+  const max = Math.max(...Object.values(totals), 1);
+
+  container.innerHTML = state.projects.map(p => {
+    const color = getProjectColor(p);
+    const pct = (totals[p] / max) * 100;
+    return `
+      <div class="project-row">
+        <div class="project-dot" style="background:${color}"></div>
+        <div style="flex:1;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="project-name">${p}</span>
+            <span class="project-time">${formatDuration(totals[p])}</span>
+          </div>
+          <div class="project-bar-wrap">
+            <div class="project-bar" style="width:${pct}%;background:${color};"></div>
+          </div>
+        </div>
+        <button class="btn-del" onclick="deleteProject('${p}')" title="Delete project">×</button>
+      </div>`;
+  }).join('');
+}
+
+function deleteProject(name) {
+  if (!confirm(`Delete project "${name}"? Its entries will show as "General".`)) return;
+  state.entries.forEach(e => { if (e.project === name) e.project = 'General'; });
+  state.projects = state.projects.filter(p => p !== name);
+  if (!state.projects.includes('General')) state.projects.unshift('General');
+  save();
+  render();
+}
+
+// ── ENTRIES ────────────────────────────────────────────────────────────────
+function renderEntries() {
+  const filterProject = document.getElementById('filterProject').value;
+  const filterDate = document.getElementById('filterDate').value;
+
+  let entries = state.entries;
+  if (filterProject) entries = entries.filter(e => e.project === filterProject);
+  if (filterDate) {
+    const d = new Date(filterDate + 'T00:00:00');
+    entries = entries.filter(e => {
+      const ed = new Date(e.startTime);
+      return ed.toDateString() === d.toDateString();
+    });
+  }
+
+  const body = document.getElementById('entriesBody');
+  const empty = document.getElementById('emptyState');
+
+  if (!entries.length) {
+    body.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  body.innerHTML = entries.map(e => {
+    const color = getProjectColor(e.project);
+    const start = new Date(e.startTime);
+    const end = new Date(e.endTime);
+    const timeStr = `${start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} → ${end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+    const dateStr = start.toLocaleDateString('en-CA', {month:'short', day:'numeric'});
+    return `
+      <tr>
+        <td class="td-task">${e.task}</td>
+        <td>
+          <span style="display:inline-flex;align-items:center;gap:5px;">
+            <span style="width:6px;height:6px;border-radius:50%;background:${color};display:inline-block;"></span>
+            <span class="td-project">${e.project}</span>
+          </span>
+        </td>
+        <td class="td-duration">${formatDuration(e.duration)}</td>
+        <td class="td-time">${dateStr} ${timeStr}</td>
+        <td><button class="btn-del" onclick="deleteEntry(${e.id})">×</button></td>
+      </tr>`;
+  }).join('');
+}
+
+function deleteEntry(id) {
+  state.entries = state.entries.filter(e => e.id !== id);
+  save();
+  render();
+}
+
+function clearFilters() {
+  document.getElementById('filterProject').value = '';
+  document.getElementById('filterDate').value = '';
+  renderEntries();
+}
+
+// ── MANUAL ENTRY ───────────────────────────────────────────────────────────
+function addManualEntry() {
+  const task = document.getElementById('manualTask').value.trim();
+  const project = document.getElementById('manualProject').value || 'General';
+  const startVal = document.getElementById('manualStart').value;
+  const endVal = document.getElementById('manualEnd').value;
+  if (!task || !startVal || !endVal) return;
+  const startTime = new Date(startVal).getTime();
+  const endTime = new Date(endVal).getTime();
+  if (endTime <= startTime) return;
+  state.entries.unshift({
+    id: Date.now(),
+    task, project, startTime, endTime,
+    duration: endTime - startTime
+  });
+  save();
+  document.getElementById('manualTask').value = '';
+  document.getElementById('manualStart').value = '';
+  document.getElementById('manualEnd').value = '';
+  render();
+}
+
+// ── STATS ──────────────────────────────────────────────────────────────────
+function renderStats() {
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay());
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  let today = 0, week = 0, month = 0, all = 0;
+  state.entries.forEach(e => {
+    const d = new Date(e.startTime);
+    all += e.duration;
+    if (d >= monthStart) month += e.duration;
+    if (d >= weekStart) week += e.duration;
+    if (d.toDateString() === todayStr) today += e.duration;
+  });
+
+  document.getElementById('statToday').textContent = formatDuration(today);
+  document.getElementById('statWeek').textContent = formatDuration(week);
+  document.getElementById('statMonth').textContent = formatDuration(month);
+  document.getElementById('statAll').textContent = formatDuration(all);
+}
+
+// ── EXPORT ─────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const rows = [['Task','Project','Date','Start','End','Duration (h)']];
+  state.entries.forEach(e => {
+    const start = new Date(e.startTime);
+    const end = new Date(e.endTime);
+    const dur = (e.duration / 3600000).toFixed(2);
+    rows.push([
+      `"${e.task}"`,
+      e.project,
+      start.toLocaleDateString('en-CA'),
+      start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+      end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+      dur
+    ]);
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `timelog_${new Date().toLocaleDateString('en-CA')}.csv`;
+  a.click();
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function render() {
+  renderProjectSelects();
+  renderProjectBreakdown();
+  renderEntries();
+  renderStats();
+}
+
+// Resume running timer on page load
+if (state.running) {
+  const btn = document.getElementById('startBtn');
+  btn.textContent = '■ STOP';
+  btn.classList.add('running');
+  document.getElementById('taskInput').value = state.running.task;
+  document.getElementById('runningLabel').innerHTML =
+    `<span class="pulse"></span>TRACKING — ${state.running.task}`;
+  timerInterval = setInterval(() => {
+    const elapsed = Date.now() - state.running.startTime;
+    document.getElementById('timerDisplay').textContent = formatDuration(elapsed);
+  }, 1000);
+}
+
+render();
+</script>
+</body>
+</html>
